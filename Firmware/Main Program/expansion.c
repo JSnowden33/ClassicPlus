@@ -11,6 +11,7 @@
 #include "input.h"
 #include "NVM.h"
 #include "IMU.h"
+#include "camera.h"
 #include "expansion.h"
 
 // Extension controller IDs recognized by Wii
@@ -67,6 +68,56 @@ u8 encEn;       // Input/output encryption enable
 u8 cfgEn;       // Configuration mode enable
 u8 fullModeEn;  // Full reporting mode enable
 
+static u32 Map(u32 x, u32 inMin, u32 inMax, u32 outMin, u32 outMax)
+{
+    // Map a single value onto a different range
+    return (((x - inMin) * (outMax - outMin)) / (inMax - inMin)) + outMin;
+}
+
+static void LUTinit()
+{   
+    u16 pos;
+    
+    for (pos = 0; pos < 256; pos++)
+    {
+        // Left Joystick X 
+        if (pos < cal.minMax[MIN_LX])
+            LUT[pos + LUT_LX] = 0;
+        
+        else if (pos > cal.minMax[MAX_LX])
+            LUT[pos + LUT_LX] = 255;
+        
+        else LUT[pos + LUT_LX] = Map(pos, cal.minMax[MIN_LX], cal.minMax[MAX_LX], 0, 255);
+        
+        // Left Joystick Y  
+        if (pos < cal.minMax[MIN_LY])
+            LUT[pos + LUT_LY] = 0;
+        
+        else if (pos > cal.minMax[MAX_LY])
+            LUT[pos + LUT_LY] = 255;
+        
+        else LUT[pos + LUT_LY] = Map(pos, cal.minMax[MIN_LY], cal.minMax[MAX_LY], 0, 255);
+        
+        // Right Joystick X
+        if (pos < cal.minMax[MIN_RX])
+            LUT[pos + LUT_RX] = 0;
+        
+        else if (pos > cal.minMax[MAX_RX])
+            LUT[pos + LUT_RX] = 255;
+        
+        else LUT[pos + LUT_RX] = Map(pos, cal.minMax[MIN_RX], cal.minMax[MAX_RX], 0, 255);
+        
+        // Right Joystick Y
+        if (pos < cal.minMax[MIN_RY])
+            LUT[pos + LUT_RY] = 0;
+        
+        else if (pos > cal.minMax[MAX_RY])
+            LUT[pos + LUT_RY] = 255;
+        
+        else LUT[pos + LUT_RY] = Map(pos, cal.minMax[MIN_RY], cal.minMax[MAX_RY], 0, 255);
+    }
+}
+
 void ExpInit(const u8 *ID)
 {
     // Controller disconnect
@@ -96,9 +147,6 @@ void ExpInit(const u8 *ID)
         default:
             break;
     }
-
-    // Load calibration settings from EEPROM
-    ExpCalLoad();
     
     // Initialize joystick lookup table
     LUTinit();
@@ -111,12 +159,15 @@ void ExpInit(const u8 *ID)
     
     // Controller reconnect
     DETECT = 1;
+    
+    expCmd = 0;
+    cfgEn = 0;
+    expEn = 1;
 }
 
 void ExpOff()
 {
     DETECT = 0;
-    I2Coff();
     expEn = 0;
 }
 
@@ -132,36 +183,36 @@ void ExpSetMode(u8 mode)
     switch(expMode)
     {
         case MODE_CLASSIC:
-            if (!expEn) 
-            {
-                I2CslaveInit(EXP_I2C_ADDR);
-                expEn = 1;
-            }
+            ExpCalLoad();
+            I2CslaveInit(EXP_I2C_ADDR, 0);
             IMUoff();
             ExpInit(classicID);
+            CamOff();
+            ANSELC = 0b01111110;
             break;
         
         case MODE_NUNCHUK:
-            if (!expEn) 
-            {
-                I2CslaveInit(EXP_I2C_ADDR);
-                expEn = 1;
-            }
+            ExpCalLoad();
+            if (cal.enable[EN_CAM]) I2CslaveInit(EXP_I2C_ADDR, CAM_I2C_ADDR);
+            else I2CslaveInit(EXP_I2C_ADDR, 0);
             if (!IMUisEnabled()) IMUinit(XL_SCALE_2G, G_OFF);
             ExpInit(nunchukID);
+            CamInit();
+            ANSELC = 0b01111110;
             break;
             
         default:
+            I2Coff();
             IMUoff();
             ExpOff();
+            CamOff();
+            ANSELC = 0;
             break;
     }    
 }
 
 void ExpCmdRcv(u8 data, u8 addr)
 {
-    u8 buf[16];
-    
     switch (addr)
     {
         // Disable encryption
@@ -180,10 +231,10 @@ void ExpCmdRcv(u8 data, u8 addr)
             
         // Generate encryption keys
         case (EXP_REG_KEY + 15):
-            I2CslaveReadMulti(EXP_REG_KEY, buf, 16);
-            encEn = InitKeys(buf);
+            expCmd = ENC_EN;
             break;
             
+        // Receive custom command
         case EXP_REG_CMD:
             expCmd = data;
             break;
@@ -195,38 +246,45 @@ void ExpCmdRcv(u8 data, u8 addr)
 
 u8 ExpCmdExec()
 {
-    u8 pgmEn;
+    u8 pgmEn = 0;
+    u8 buf[16];
     
     switch (expCmd)
     {
         case PGM_EN:
-            pgmEn = 1;
             expCmd = 0;
+            pgmEn = 1;
             break;
                                 
         case CFG_EN:
-            cfgEn = 1;
             expCmd = 0;
+            cfgEn = 1;
             break;
                                 
         case CFG_DIS:
-            cfgEn = 0;
             expCmd = 0;
+            cfgEn = 0;
             break;
                                 
         case CAL_LOAD:
-            ExpCalLoad();
             expCmd = 0;
+            ExpCalLoad();
             break;
                                 
         case CAL_STORE:
-            ExpCalStore();
             expCmd = 0;
+            ExpCalStore();
             break;
                                 
         case CAL_DEFAULT:
-            ExpCalStoreDefault();
             expCmd = 0;
+            ExpCalStoreDefault();
+            break;
+            
+        case ENC_EN:
+            expCmd = 0;
+            I2CslaveReadMulti(EXP_REG_KEY, buf, 16);
+            encEn = InitKeys(buf);
             break;
         
         default:
@@ -239,11 +297,6 @@ u8 ExpCmdExec()
 u8 ExpIsEncEnabled()
 {
     return encEn;
-}
-
-u8 ExpIsCfgEnabled()
-{
-    return cfgEn;
 }
 
 void ExpCalInit(u8 *buf)
@@ -273,27 +326,30 @@ void ExpCalInit(u8 *buf)
     cal.enable[EN_JOY_L] =  buf[12] & 0x01;
     cal.enable[EN_JOY_R] = (buf[12] & 0x02) >> 1;
     cal.enable[EN_TRIG] =  (buf[12] & 0x04) >> 2;
+    cal.enable[EN_CAM] =   (buf[12] & 0x08) >> 3;
+    
+    CamSetSensitivity(buf[13]);
 }
 
 void ExpCalLoad()
 {
-    u8 buf[13];
-    EEread(EXP_REG_LX_MIN - 0x60, buf, 13);         // Get EEPROM values
-    I2CslaveWriteMulti(EXP_REG_LX_MIN, buf, 13);    // Transfer to I2C register
+    u8 buf[14];
+    EEread(EE_REG_LX_MIN, buf, 14);                 // Get EEPROM values
+    I2CslaveWriteMulti(EXP_REG_LX_MIN, buf, 14);    // Transfer to I2C register
     ExpCalInit(buf);                                // Transfer to struct
 }
 
 void ExpCalStore()
 {
-    u8 buf[13];
-    I2CslaveReadMulti(EXP_REG_LX_MIN, buf, 13);     // Get I2C register values
-    EEwrite(EXP_REG_LX_MIN - 0x60, buf, 13);        // Transfer to EEPROM
+    u8 buf[14];
+    I2CslaveReadMulti(EXP_REG_LX_MIN, buf, 14);     // Get I2C register values
+    EEwrite(EE_REG_LX_MIN, buf, 14);                // Transfer to EEPROM
     ExpCalInit(buf);                                // Transfer to struct
 }
 
 void ExpCalStoreDefault()
 {
-    u8 buf[13];
+    u8 buf[14];
     
     // Maximum joystick boundaries, deadzone = 10, joysticks enabled, triggers disabled
     buf[0] = 0;
@@ -309,8 +365,9 @@ void ExpCalStoreDefault()
     buf[10] = 0;
     buf[11] = 0;
     buf[12] = 3;
+    buf[13] = 50;
     
-    EEwrite(EXP_REG_LX_MIN - 0x60, buf, 13);
+    EEwrite(EE_REG_LX_MIN, buf, 14);
     ExpCalInit(buf);
 }
 
@@ -331,8 +388,8 @@ void ExpUpdate()
             // Use neutral position if joystick magnitude is within deadzone or joystick is disabled          
             if ((((s16)axes.LX - 128)*((s16)axes.LX - 128) + ((s16)axes.LY - 128)*((s16)axes.LY - 128) < ((u16)cal.deadzones[DZ_L]*(u16)cal.deadzones[DZ_L])) || !cal.enable[EN_JOY_L])
             {
-                axesMapped.LX = 127;
-                axesMapped.LY = 127;
+                axesMapped.LX = 0x7F;
+                axesMapped.LY = 0x7F;
             }
             else
             {
@@ -345,8 +402,8 @@ void ExpUpdate()
             
             if ((((s16)axes.RX - 128)*((s16)axes.RX - 128) + ((s16)axes.RY - 128)*((s16)axes.RY - 128) < ((u16)cal.deadzones[DZ_R]*(u16)cal.deadzones[DZ_R])) || !cal.enable[EN_JOY_R])
             {
-                axesMapped.RX = 127;
-                axesMapped.RY = 127;
+                axesMapped.RX = 0x7F;
+                axesMapped.RY = 0x7F;
             }
             else
             {
@@ -359,8 +416,11 @@ void ExpUpdate()
             
             if (!cal.enable[EN_TRIG])
             {
-                axesMapped.LT = calDataClassic[CC_CAL_LT_LOWER];
-                axesMapped.RT = calDataClassic[CC_CAL_RT_LOWER];
+                if (!buttons.L) axesMapped.LT = 0xFF;
+                else axesMapped.LT = calDataClassic[CC_CAL_LT_LOWER];
+                
+                if (!buttons.R) axesMapped.RT = 0xFF;
+                else axesMapped.RT = calDataClassic[CC_CAL_RT_LOWER];
             }
             else
             {
@@ -413,6 +473,7 @@ void ExpUpdate()
                 buf[1] = ((axesMapped.RX << 5) & 0xC0) |    // RX [2:1]
                           (axesMapped.LY & 0x3F);           // LY
                 buf[2] = ((axesMapped.RX << 7) & 0x80) |    // RX [0]
+                         ((axesMapped.LT << 2) & 0x60) |    // LT [4:3]
                           (axesMapped.RY & 0x1F);           // RY 
                 buf[3] = ((axesMapped.LT << 5) & 0xE0) |    // LT [2:0]
                           (axesMapped.RT & 0x1F);           // RT
@@ -447,11 +508,14 @@ void ExpUpdate()
             NKcalAYfull = (calDataNunchuk[NK_CAL_AY_1G] << 2) | ((calDataNunchuk[NK_CAL_A_1G_L] >> 2) & 0x03);
             NKcalAZfull = (calDataNunchuk[NK_CAL_AZ_1G] << 2) | (calDataNunchuk[NK_CAL_A_1G_L] & 0x03);
             
+            // Update IR camera cursor
+            if (cal.enable[EN_CAM]) CamUpdateCursor();
+            
             // Use neutral position if joystick magnitude is within deadzone or joystick is disabled
             if ((((s16)axes.LX - 128)*((s16)axes.LX - 128) + ((s16)axes.LY - 128)*((s16)axes.LY - 128) < ((u16)cal.deadzones[DZ_L]*(u16)cal.deadzones[DZ_L])) || !cal.enable[EN_JOY_L])
             {
-                axesMapped.LX = 127;
-                axesMapped.LY = 127;
+                axesMapped.LX = 0x7F;
+                axesMapped.LY = 0x7F;
             }
             else
             {
@@ -549,54 +613,4 @@ void ExpUpdateDefault()
         default:
             break;
     }   
-}
-
-u32 Map(u32 x, u32 inMin, u32 inMax, u32 outMin, u32 outMax)
-{
-    // Map a single value onto a different range
-    return (((x - inMin) * (outMax - outMin)) / (inMax - inMin)) + outMin;
-}
-
-void LUTinit()
-{   
-    u16 pos;
-    
-    for (pos = 0; pos < 256; pos++)
-    {
-        // Left Joystick X 
-        if (pos < cal.minMax[MIN_LX])
-            LUT[pos + LUT_LX] = 0;
-        
-        else if (pos > cal.minMax[MAX_LX])
-            LUT[pos + LUT_LX] = 255;
-        
-        else LUT[pos + LUT_LX] = Map(pos, cal.minMax[MIN_LX], cal.minMax[MAX_LX], 0, 255);
-        
-        // Left Joystick Y  
-        if (pos < cal.minMax[MIN_LY])
-            LUT[pos + LUT_LY] = 0;
-        
-        else if (pos > cal.minMax[MAX_LY])
-            LUT[pos + LUT_LY] = 255;
-        
-        else LUT[pos + LUT_LY] = Map(pos, cal.minMax[MIN_LY], cal.minMax[MAX_LY], 0, 255);
-        
-        // Right Joystick X
-        if (pos < cal.minMax[MIN_RX])
-            LUT[pos + LUT_RX] = 0;
-        
-        else if (pos > cal.minMax[MAX_RX])
-            LUT[pos + LUT_RX] = 255;
-        
-        else LUT[pos + LUT_RX] = Map(pos, cal.minMax[MIN_RX], cal.minMax[MAX_RX], 0, 255);
-        
-        // Right Joystick Y
-        if (pos < cal.minMax[MIN_RY])
-            LUT[pos + LUT_RY] = 0;
-        
-        else if (pos > cal.minMax[MAX_RY])
-            LUT[pos + LUT_RY] = 255;
-        
-        else LUT[pos + LUT_RY] = Map(pos, cal.minMax[MIN_RY], cal.minMax[MAX_RY], 0, 255);
-    }
 }
