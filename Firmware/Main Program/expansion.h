@@ -30,8 +30,9 @@
 #define EXP_REG_DZ_R    0x69    // Right joystick deadzone radius
 #define EXP_REG_INVERT1 0x6A    // Invert active high ( 0 | 0 | RT | LT | RY | RX | LY | LX )
 #define EXP_REG_INVERT2 0x6B    // Invert active high ( 0 | 0 | 0 | 0 | 0 | AZ | AY | AX )
-#define EXP_REG_CONFIG  0x6C    // Misc. settings ( 0 | 0 | 0 | 0 | 0 | Trigger Enable | Right Joystick Enable | Left Joystick Enable )
-#define EXP_REG_CMD     0x6D    // Command reception from Wii Remote
+#define EXP_REG_CONFIG  0x6C    // Misc. settings ( 0 | 0 | 0 | 0 | IR Camera Enable | Trigger Enable | Right Joystick Enable | Left Joystick Enable )
+#define EXP_REG_IR_SENS 0x6D    // Camera sensitivity
+#define EXP_REG_CMD     0x6F    // Command reception from Wii Remote
 #define EXP_REG_LX_RAW  0x70    // Raw LX output
 #define EXP_REG_LY_RAW  0x71    // Raw LY output
 #define EXP_REG_RX_RAW  0x72    // Raw RX output
@@ -52,6 +53,9 @@
 #define CAL_DEFAULT     0x1D    // Reset settngs in EEPROM
 #define CFG_EN          0x1E    // Enable configuration mode
 #define CFG_DIS         0x2E    // Disable configuration mode
+#define ENC_EN          0x1F    // Enable device encryption
+
+extern u8 LUT[1024];
 
 // LUT register positions
 #define LUT_LX  0x000
@@ -90,9 +94,11 @@ typedef struct
     u8 minMax[8];
     u8 deadzones[2];
     u8 invert[9];
-    u8 enable[3];
+    u8 enable[4];
 } 
 Calibration;
+
+extern Calibration cal;
 
 // Calibration struct register positions
 #define MIN_LX  0
@@ -120,6 +126,7 @@ Calibration;
 #define EN_JOY_L    0
 #define EN_JOY_R    1
 #define EN_TRIG     2
+#define EN_CAM      3
 
 void ExpInit(const u8 *ID);
 
@@ -135,8 +142,6 @@ u8 ExpCmdExec();
 
 u8 ExpIsEncEnabled();
 
-u8 ExpIsCfgEnabled();
-
 void ExpCalInit(u8 *buf);
 
 void ExpCalLoad();
@@ -148,9 +153,5 @@ void ExpCalStoreDefault();
 void ExpUpdate();
 
 void ExpUpdateDefault();
-
-u32 Map(u32 x, u32 inMin, u32 inMax, u32 outMin, u32 outMax);
-
-void LUTinit();
 
 #endif  /* _EXPANSION_H_ */
