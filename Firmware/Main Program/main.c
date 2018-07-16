@@ -46,6 +46,7 @@
 #include "ADC.h"
 #include "MSSP.h"
 #include "expansion.h"
+#include "camera.h"
 
 u8 mode;
 u8 newMode;
@@ -152,7 +153,7 @@ void main()
             else newMode = MODE_NUNCHUK;
         }
         else newMode = MODE_OFF;
-            
+        
         // Update mode
         if (newMode != mode) 
         {
@@ -164,7 +165,8 @@ void main()
         {
             InputGetButtons(mode);  // Get current button states
             InputGetAxes(mode);     // Get current axis states
-            ExpUpdate();            // Send data to Wii Remote
+            ExpUpdate();            // Send controller data to Wii Remote
+            CamUpdateBlobs();       // Send camera data to Wii Remote
             
             // Execute special commands, go to bootloader if triggered
             if (ExpCmdExec()) BeginBootloader();
