@@ -6,8 +6,8 @@
 #include <xc.h>
 #include "pin_defs.h"
 #include "config.h"
-#include "bootloader.h"
 #include "NVM.h"
+#include "bootloader.h"
 
 u8 I2CregAddr;
 u8 I2CregAddrFlag;
@@ -32,6 +32,7 @@ void I2CslaveInit(const u8 addr)
     SSP1CON2 = 0b00000001;      // Clock stretching enabled
     SSP1CON3 = 0b00000000;      // Address holding disabled, data holding disabled
     SSP1ADD = (addr << 1);
+    SSP1MSK = 0xFF;
     SSP1STAT = 0b00000000;
     SSP1CON1bits.SSPEN = 1;
 }
