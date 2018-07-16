@@ -8,7 +8,6 @@
 #include "pin_defs.h"
 #include "ADC.h"
 #include "IMU.h"
-#include "expansion.h"
 #include "input.h"
 
 // Debounced button/axis states
@@ -58,10 +57,10 @@ void InputInit()
     buttons.Minus = 1;
     buttons.Home = 1;
     
-    axes.LX = 127;
-    axes.LY = 127;
-    axes.RX = 127;
-    axes.RY = 127;
+    axes.LX = 0x7F;
+    axes.LY = 0x7F;
+    axes.RX = 0x7F;
+    axes.RY = 0x7F;
     axes.LT = 0;
     axes.RT = 0;
 }
@@ -256,28 +255,7 @@ void InputGetAxes(u8 mode)
 {      
     switch (mode)
     {
-        case MODE_CLASSIC:
-            axes.LX = ADCread(LX_CH) >> 2;
-            axes.LY = ADCread(LY_CH) >> 2;
-            axes.RX = ADCread(RX_CH) >> 2;
-            axes.RY = ADCread(RY_CH) >> 2;
-            axes.LT = ADCread(LT_CH) >> 2;
-            axes.RT = ADCread(RT_CH) >> 2;
-            break;
-            
-        case MODE_NUNCHUK: 
-            axes.LX = ADCread(LX_CH) >> 2;
-            axes.LY = ADCread(LY_CH) >> 2;
-            
-            // Get all axis values in configuration mode
-            if (ExpIsCfgEnabled())
-            {
-                axes.RX = ADCread(RX_CH) >> 2;
-                axes.RY = ADCread(RY_CH) >> 2;
-                axes.LT = ADCread(LT_CH) >> 2;
-                axes.RT = ADCread(RT_CH) >> 2;
-            }
-            
+        case MODE_NUNCHUK:            
             // Read accelerometer values if IMU is initialized
             if (IMUisEnabled())
             {
@@ -291,6 +269,14 @@ void InputGetAxes(u8 mode)
                 axes.AY = 0;    // Neutral Y (0g)
                 axes.AZ = 255;  // Neutral Z (1g)
             }
+        
+        case MODE_CLASSIC:
+            axes.LX = ADCread(LX_CH) >> 2;
+            axes.LY = ADCread(LY_CH) >> 2;
+            axes.RX = ADCread(RX_CH) >> 2;
+            axes.RY = ADCread(RY_CH) >> 2;
+            axes.LT = ADCread(LT_CH) >> 2;
+            axes.RT = ADCread(RT_CH) >> 2;
             break;
             
         default:
