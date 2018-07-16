@@ -12,7 +12,7 @@
 // I2C register definitions
 #define I2C_REG_CAL     0x20    // Calibration values (0x20 to 0x3F)
 #define I2C_REG_ID      0xFA    // Device ID (0xFA to 0xFF)
-#define I2C_REG_CMD     0x6D    // Command reception from Wiimote
+#define I2C_REG_CMD     0x6F    // Command reception from Wiimote
 #define I2C_REG_DAT     0xBF    // Data reception from Wiimote
 #define I2C_REG_CID     0x82    // Custom device ID  
 
