@@ -12,19 +12,19 @@
 #define READ_ADDR_ACK   0b00001100
 #define READ_DAT_ACK    0b00101100
 
-void I2CslaveInit(const u8 addr);
+void I2CslaveInit(const u8 addr1, const u8 addr2);
 
 void I2Coff();
 
 u8 I2CisEnabled();
 
-u8 I2CslaveRead(u8 addr);
+u8 I2CslaveRead(u16 addr);
 
-void I2CslaveReadMulti(u8 addr, u8 *buf, u8 length);
+void I2CslaveReadMulti(u16 addr, u8 *buf, u8 length);
 
-void I2CslaveWrite(u8 addr, u8 data);
+void I2CslaveWrite(u16 addr, u8 data);
 
-void I2CslaveWriteMulti(u8 addr, u8 *buf, u8 length);
+void I2CslaveWriteMulti(u16 addr, u8 *buf, u8 length);
 
 void I2CslaveRelease();
 
