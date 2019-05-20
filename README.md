@@ -1,5 +1,7 @@
 # Classic+
 Classic+ is a hardware emulator that replaces the Wii Classic Controller and Nunchuk.  
+
+![Classic+](https://i.imgur.com/NcnILJN.jpg)
   
 ### Usage
 Classic+ normally operates as a Classic Controller. Nunchuk mode can be enabled at any time by connecting the MD pin to GND. The device can be temporarily disabled by connecting the EN pin to GND. The SDA, SCL, and DET pins should be connected to a Wii Remote expansion port. Unofficial Wii Remotes may not be supported.
